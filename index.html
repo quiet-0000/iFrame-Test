@@ -18,17 +18,15 @@
 </head>
 <body>
 <!-- =====================================================================
-  BioBlade 3D Viewer: einbettbares Element
+  BioBlade 3D Viewer: einbettbares Element (nur Schwarz)
   Einfach diesen kompletten Block in deine Webseite kopieren.
-  Videos liegen im Ordner "bioblade-media/" neben dieser Datei
+  Video liegt im Ordner "bioblade-media/" neben dieser Datei
   (Pfade unten im CONFIG-Block anpassbar).
 ====================================================================== -->
 
 <div class="bb-viewer" id="bbViewer">
   <div class="bb-stage">
-    <video class="bb-vid" data-key="black"  muted playsinline preload="auto"></video>
-    <video class="bb-vid" data-key="white"  muted playsinline preload="auto"></video>
-    <video class="bb-vid" data-key="switch" muted playsinline preload="auto"></video>
+    <video class="bb-vid" data-key="black" muted playsinline preload="auto"></video>
     <div class="bb-loading">Lade …</div>
 
     <!-- Steuerung im Frame (Frosted Glass) -->
@@ -37,10 +35,6 @@
            aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0">
         <div class="bb-track"></div>
         <div class="bb-thumb"></div>
-      </div>
-      <div class="bb-colors">
-        <button class="bb-color bb-active" data-color="black" aria-label="Schwarz"></button>
-        <button class="bb-color" data-color="white" aria-label="Weiß"></button>
       </div>
     </div>
   </div>
@@ -67,7 +61,7 @@
   .bb-loading{ position:absolute; inset:0; display:flex; align-items:center; justify-content:center; font-size:14px; background:transparent; transition:opacity .3s; }
   .bb-loading.bb-hide{ opacity:0; pointer-events:none; }
 
-  /* Frosted-Glass-Leiste im Frame */
+  /* Frosted-Glass-Leiste im Frame (nur Slider) */
   .bb-controls{
     position:absolute; left:16px; right:16px; bottom:16px;
     display:flex; align-items:center; gap:20px; padding:10px 18px;
@@ -90,14 +84,6 @@
     will-change:transform;
   }
   .bb-slider:focus-visible .bb-thumb{ box-shadow:0 0 0 3px rgba(41,151,255,.5); }
-
-  .bb-colors{ display:flex; gap:12px; }
-  .bb-color{ width:28px; height:28px; border-radius:50%; border:2px solid rgba(255,255,255,.25); cursor:pointer; padding:0; transition:transform .15s, border-color .15s; }
-  .bb-color[data-color="black"]{ background:#111; }
-  .bb-color[data-color="white"]{ background:#eee; }
-  .bb-color:hover{ transform:scale(1.1); }
-  .bb-color.bb-active{ border-color:#2997ff; box-shadow:0 0 0 2px rgba(41,151,255,.35); }
-  .bb-color:disabled{ cursor:default; }
 </style>
 
 <script>
@@ -106,18 +92,14 @@
   var CONFIG = {
     folder: "bioblade-media/",
     files: {
-      black:  { src: "BioBlade Black0001-0060.mp4",       frames: 60 },
-      white:  { src: "BioBlade White0001-0060.mp4",       frames: 60 },
-      switch: { src: "BioBlade Switch Anim 0001-0030.mp4", frames: 30 }
+      black: { src: "BioBlade Black0001-0060.mp4", frames: 60 }
     },
-    startColor: "black",
     snapMs: 380,         // Dauer des Zurückschnappens zur Mitte (0 = sofort)
     bounce: 0.9,         // Stärke des Bounce-Back beim Loslassen (0 = keiner, 0.9 = subtil, 1.7 = stark)
     leftWraps: true,     // links: 1 → 60 → 59 → … (gespiegelte Drehrichtung)
     softStart: 0.75,     // ab hier (0–1 des Wegs) wird der Slider zum Ende hin immer langsamer
     maxReach: 0.96,      // Grenzwert, dem er sich nähert, aber nie erreicht (0.96 ≈ Frame 58 von 60)
-    smoothing: 0.28,     // Nachlauf des Sliders (0.1 = sehr weich, 1 = direkt)
-    switchBlackToWhite: "forward" // Switch-Video läuft Schwarz→Weiß vorwärts, Weiß→Schwarz rückwärts
+    smoothing: 0.28      // Nachlauf des Sliders (0.1 = sehr weich, 1 = direkt)
   };
   /* ============================================== */
 
@@ -125,13 +107,11 @@
   var slider = root.querySelector(".bb-slider");
   var thumb  = root.querySelector(".bb-thumb");
   var loader = root.querySelector(".bb-loading");
-  var btns   = root.querySelectorAll(".bb-color");
   var vids   = {};
   root.querySelectorAll(".bb-vid").forEach(function(v){ vids[v.dataset.key] = v; });
 
   var THUMB = 24;
-  var current = CONFIG.startColor;
-  var busy = false;          // Switch läuft
+  var current = "black";
   var snapRAF = null, tickRAF = null;
   var dragging = false;
   var rRaw = 0;              // Roh-Position des Fingers/Cursors (-1 … 1)
@@ -214,7 +194,6 @@
     sTarget = soft(rRaw);
   }
   slider.addEventListener("pointerdown", function(e){
-    if(busy) return;
     dragging = true;
     slider.classList.add("bb-grab");
     try{ slider.setPointerCapture(e.pointerId); }catch(_){}
@@ -226,7 +205,6 @@
   slider.addEventListener("pointercancel", release);
 
   slider.addEventListener("keydown", function(e){
-    if(busy) return;
     if(e.key === "ArrowRight" || e.key === "ArrowLeft"){
       e.preventDefault();
       cancelAnimationFrame(snapRAF);
@@ -265,60 +243,18 @@
     if(!dragging && sCur === 0) return;
     dragging = false;
     slider.classList.remove("bb-grab");
-    if(!busy) snapToCenter(true);
+    snapToCenter(true);
   }
-
-  /* ---------- Farbwechsel mit Switch-Animation ---------- */
-  function playSwitch(reverse){
-    return new Promise(function(res){
-      var v = vids["switch"], n = CONFIG.files["switch"].frames;
-      var dur = v.duration * 1000, t0 = performance.now();
-      (function step(now){
-        var k = Math.min(1, (now - t0) / dur);
-        var f = Math.min(n - 1, Math.floor((reverse ? 1 - k : k) * n));
-        seek(v, frameTime("switch", f));
-        if(k < 1) requestAnimationFrame(step); else res();
-      })(t0);
-    });
-  }
-
-  async function switchTo(target){
-    if(busy || target === current) return;
-    busy = true;
-    dragging = false;
-    slider.classList.add("bb-disabled");
-    btns.forEach(function(b){ b.disabled = true; });
-
-    await snapToCenter(false);                         // 1. Slider in die Mitte (Frame 1), ohne Bounce
-
-    var reverse = (target === "black");                // Weiß → Schwarz = rückwärts
-    if(CONFIG.switchBlackToWhite === "reverse") reverse = !reverse;
-    var sv = vids["switch"], n = CONFIG.files["switch"].frames;
-    await seekAsync(sv, frameTime("switch", reverse ? n - 1 : 0));
-    show("switch");                                    // 2. Switch-Video einblenden
-    await playSwitch(reverse);                         //    und abspielen
-
-    await seekAsync(vids[target], frameTime(target, 0));
-    current = target;                                  // 3. Neue Farbe, Frame 1
-    show(target);
-
-    btns.forEach(function(b){ b.classList.toggle("bb-active", b.dataset.color === target); b.disabled = false; });
-    slider.classList.remove("bb-disabled");
-    busy = false;
-  }
-  btns.forEach(function(b){ b.addEventListener("click", function(){ switchTo(b.dataset.color); }); });
 
   /* ---------- Start ---------- */
-  var ready = Object.keys(vids).map(function(k){
-    return new Promise(function(res){
-      var v = vids[k];
-      if(v.readyState >= 1) return res();
-      v.addEventListener("loadedmetadata", res, { once: true });
-      v.addEventListener("error", function(){ loader.textContent = "Video nicht gefunden: " + CONFIG.files[k].src; }, { once: true });
-    });
+  var v = vids[current];
+  var ready = new Promise(function(res){
+    if(v.readyState >= 1) return res();
+    v.addEventListener("loadedmetadata", res, { once: true });
+    v.addEventListener("error", function(){ loader.textContent = "Video nicht gefunden: " + CONFIG.files[current].src; }, { once: true });
   });
-  Promise.all(ready).then(function(){
-    return seekAsync(vids[current], frameTime(current, 0));
+  ready.then(function(){
+    return seekAsync(v, frameTime(current, 0));
   }).then(function(){
     show(current);
     loader.classList.add("bb-hide");
